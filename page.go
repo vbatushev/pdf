@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"sort"
 	"strings"
 )
@@ -1029,22 +1030,36 @@ func (x TextHorizontal) Less(i, j int) bool {
 // An Outline is a tree describing the outline (also known as the table of contents)
 // of a document.
 type Outline struct {
-	Title string    // title for this element
-	Child []Outline // child elements
+	Title   string    // title for this element
+	PageNum int       // Num of page by order in PDF
+	Child   []Outline // child elements
 }
 
 // Outline returns the document outline.
 // The Outline returned is the root of the outline tree and typically has no Title itself.
 // That is, the children of the returned root are the top-level entries in the outline.
 func (r *Reader) Outline() Outline {
-	return buildOutline(r.Trailer().Key("Root").Key("Outlines"))
+	return r.buildOutline(r.Trailer().Key("Root").Key("Outlines"))
 }
 
-func buildOutline(entry Value) Outline {
+// GetPageNum return num of page by order in PDF
+func (r *Reader) GetPageNum(p Page) int {
+	for i := 1; i < r.NumPage()+1; i++ {
+		if reflect.DeepEqual(r.Page(i), p) {
+			return i
+		}
+	}
+	return 0
+}
+
+func (r *Reader) buildOutline(entry Value) Outline {
 	var x Outline
 	x.Title = entry.Key("Title").Text()
+	if entry.Key("Dest").Kind() == Array {
+		x.PageNum = r.GetPageNum(Page{entry.Key("Dest").Index(0)})
+	}
 	for child := entry.Key("First"); child.Kind() == Dict; child = child.Key("Next") {
-		x.Child = append(x.Child, buildOutline(child))
+		x.Child = append(x.Child, r.buildOutline(child))
 	}
 	return x
 }
